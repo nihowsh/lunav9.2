@@ -14,11 +14,9 @@ async function getVideoMetadata(url) {
     const info = await ytdlp(url, {
       dumpSingleJson: true,
       noWarnings: true,
-      noCallHome: true,
       preferFreeFormats: true,
-      format: 'bestaudio',
+      format: 'best',
       noCheckCertificates: true,
-      extractAudio: true,
       addHeader: [
         'User-Agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
       ]
