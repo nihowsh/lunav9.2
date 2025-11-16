@@ -8,7 +8,7 @@ const execAsync = promisify(exec);
 let activeStreams = new Map();
 
 async function getVideoMetadata(url) {
-  const ytdlp = require('yt-dlp-exec').create('/nix/store/am2x1y1qyja0hbyjpffj7rcvycp9d644-yt-dlp-2025.6.30/bin/yt-dlp');
+  const ytdlp = require('yt-dlp-exec').create('/tmp/yt-dlp');
   
   try {
     const info = await ytdlp(url, {
@@ -17,6 +17,11 @@ async function getVideoMetadata(url) {
       noCallHome: true,
       preferFreeFormats: true,
       format: 'bestaudio',
+      noCheckCertificates: true,
+      extractAudio: true,
+      addHeader: [
+        'User-Agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+      ]
     });
 
     let audioUrl = info.url;
@@ -40,6 +45,7 @@ async function getVideoMetadata(url) {
       url: audioUrl,
     };
   } catch (error) {
+    console.error('yt-dlp error:', error);
     throw new Error(`Failed to fetch video info: ${error.message}`);
   }
 }
