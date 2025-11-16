@@ -8,19 +8,19 @@ const execAsync = promisify(exec);
 let activeStreams = new Map();
 
 async function getVideoMetadata(url) {
-  const ytdlp = require('yt-dlp-exec').create('/tmp/yt-dlp');
-  
   try {
-    const info = await ytdlp(url, {
-      dumpSingleJson: true,
-      noWarnings: true,
-      preferFreeFormats: true,
-      format: 'best',
-      noCheckCertificates: true,
-      addHeader: [
-        'User-Agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-      ]
+    const command = `/tmp/yt-dlp --dump-single-json --no-warnings --format "best" --no-check-certificate --user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" "${url}"`;
+    
+    const { stdout, stderr } = await execAsync(command, {
+      maxBuffer: 10 * 1024 * 1024,
+      timeout: 60000
     });
+
+    if (stderr && stderr.includes('ERROR')) {
+      throw new Error(stderr);
+    }
+
+    const info = JSON.parse(stdout);
 
     let audioUrl = info.url;
     
