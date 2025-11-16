@@ -11,6 +11,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@dank074/discord-video-stream": "^5.0.2",
     "@discordjs/opus": "^0.10.0",
     "@discordjs/voice": "^0.18.0",
     "axios": "^1.13.2",
