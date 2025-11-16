@@ -69,14 +69,26 @@ function streamAudioFromUrl(url, loop = true) {
         '-reconnect_delay_max', '5',
         '-i', url,
         '-vn',
-        '-ar', '22050',
-        '-ac', '1',
-        '-b:a', '32k',
-        '-f', 'mp3',
+        '-ar', '48000',
+        '-ac', '2',
+        '-b:a', '64k',
+        '-f', 's16le',
+        '-acodec', 'pcm_s16le',
         'pipe:1'
-      ]);
+      ], {
+        windowsHide: true
+      });
 
       this.currentFfmpeg.stderr.on('data', (data) => {
+        console.log('FFmpeg:', data.toString());
+      });
+
+      this.currentFfmpeg.on('error', (error) => {
+        console.error('FFmpeg process error:', error);
+      });
+
+      this.currentFfmpeg.on('exit', (code, signal) => {
+        console.log(`FFmpeg exited with code ${code} and signal ${signal}`);
       });
 
       return this.currentFfmpeg;
@@ -102,19 +114,23 @@ function streamAudioFromUrl(url, loop = true) {
   
   const ffmpeg = streamController.spawnFfmpeg();
   const resource = createAudioResource(ffmpeg.stdout, {
-    inputType: StreamType.Arbitrary,
+    inputType: StreamType.Raw,
     inlineVolume: true,
   });
 
   resource.volume.setVolume(0.5);
   player.play(resource);
+  
+  console.log('Audio player started playing resource');
 
   player.on(AudioPlayerStatus.Idle, () => {
+    console.log('Audio player idle, loop enabled:', streamController.loop);
     if (streamController.loop) {
       setTimeout(() => {
+        console.log('Restarting stream for loop...');
         const newFfmpeg = streamController.spawnFfmpeg();
         const newResource = createAudioResource(newFfmpeg.stdout, {
-          inputType: StreamType.Arbitrary,
+          inputType: StreamType.Raw,
           inlineVolume: true,
         });
 
@@ -126,6 +142,10 @@ function streamAudioFromUrl(url, loop = true) {
 
   player.on('error', error => {
     console.error('Audio player error:', error);
+  });
+  
+  player.on(AudioPlayerStatus.Playing, () => {
+    console.log('Audio player status: Playing');
   });
 
   return streamController;
