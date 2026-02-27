@@ -611,6 +611,13 @@ client.on('messageCreate', async message => {
 // ============== BOT: INTERACTION HANDLING ==============
 client.on('interactionCreate', async interaction => {
   try {
+    if (interaction.isAutocomplete()) {
+      const command = client.commands.get(interaction.commandName);
+      if (command && command.autocomplete) {
+        await command.autocomplete(interaction);
+      }
+      return;
+    }
     if (!interaction.isChatInputCommand()) return;
     const command = client.commands.get(interaction.commandName);
     if (!command) return;
