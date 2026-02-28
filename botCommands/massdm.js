@@ -43,8 +43,26 @@ module.exports = {
     if (guildsToDM.length === 0) {
       if (interaction.guild) {
         guildsToDM = [interaction.guild];
+      } else if (guildId && guildId !== 'all') {
+        // Fallback for when autocomplete selection might fail but ID is provided
+        const manualGuild = client.guilds.cache.get(guildId);
+        if (manualGuild) {
+          guildsToDM = [manualGuild];
+        } else {
+          return interaction.reply({ content: '❌ Could not find the specified server. Please ensure the bot is a member of that server.', ephemeral: true });
+        }
       } else {
-        return interaction.reply({ content: '❌ Please specify a server or use this command in a server.', ephemeral: true });
+        return interaction.reply({ content: '❌ Please select a server from the list or use this command in a server where the bot is present.', ephemeral: true });
+      }
+    }
+
+    // Check if we actually have permissions to see members in these guilds
+    for (const g of guildsToDM) {
+      if (!g.available) continue;
+      try {
+        await g.members.fetch({ limit: 1 });
+      } catch (err) {
+        return interaction.reply({ content: `❌ The bot doesn't have permission to view members in **${g.name}**. Please ensure it has the "Guild Members" intent and appropriate permissions.`, ephemeral: true });
       }
     }
 
@@ -103,9 +121,15 @@ module.exports = {
       value: guild.id,
     }));
 
-    guilds.push({ name: 'All Servers', value: 'all' });
+    guildsToDM.push({ name: 'All Servers', value: 'all' });
 
     const filtered = guilds.filter(choice => choice.name.toLowerCase().includes(focusedValue.toLowerCase())).slice(0, 25);
-    await interaction.respond(filtered);
+    try {
+      await interaction.respond(filtered);
+    } catch (err) {
+      if (err.code !== 10062) { // Ignore "Unknown interaction" which happens if bot is too slow or user cancels
+        console.error('Autocomplete response error:', err);
+      }
+    }
   }
 };
