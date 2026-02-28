@@ -44,7 +44,6 @@ module.exports = {
       if (interaction.guild) {
         guildsToDM = [interaction.guild];
       } else if (guildId && guildId !== 'all') {
-        // Fallback for when autocomplete selection might fail but ID is provided
         const manualGuild = client.guilds.cache.get(guildId);
         if (manualGuild) {
           guildsToDM = [manualGuild];
@@ -53,16 +52,6 @@ module.exports = {
         }
       } else {
         return interaction.reply({ content: '❌ Please select a server from the list or use this command in a server where the bot is present.', ephemeral: true });
-      }
-    }
-
-    // Check if we actually have permissions to see members in these guilds
-    for (const g of guildsToDM) {
-      if (!g.available) continue;
-      try {
-        await g.members.fetch({ limit: 1 });
-      } catch (err) {
-        return interaction.reply({ content: `❌ The bot doesn't have permission to view members in **${g.name}**. Please ensure it has the "Guild Members" intent and appropriate permissions.`, ephemeral: true });
       }
     }
 
@@ -77,11 +66,17 @@ module.exports = {
       await interaction.channel.send(`📤 Starting mass DM to members in **${guildToDM.name}**...`);
       
       try {
-        await guildToDM.members.fetch();
-        const members = guildToDM.members.cache.filter(m => !m.user.bot && m.id !== client.user.id);
+        // Force fetch all members to ensure cache is populated
+        const membersFetched = await guildToDM.members.fetch({ force: true });
+        const members = membersFetched.filter(m => !m.user.bot && m.id !== client.user.id);
         const guildTotal = members.size;
         totalTargeted += guildTotal;
         
+        if (guildTotal === 0) {
+          await interaction.channel.send(`⚠️ No members found in **${guildToDM.name}** or unable to fetch them.`);
+          continue;
+        }
+
         let guildSent = 0;
         let guildFailed = 0;
         let index = 0;
@@ -107,7 +102,7 @@ module.exports = {
         }
         await interaction.channel.send(`✅ Finished server: **${guildToDM.name}** (Sent: ${guildSent}, Failed: ${guildFailed})`);
       } catch (err) {
-        await interaction.channel.send(`❌ Failed to fetch members for **${guildToDM.name}**: ${err.message}`);
+        await interaction.channel.send(`❌ Failed to process members for **${guildToDM.name}**: ${err.message}`);
       }
     }
 
