@@ -1,4 +1,5 @@
-const { SlashCommandBuilder, ChannelType } = require('discord.js');
+const { SlashCommandBuilder } = require('discord.js');
+const axios = require('axios');
 
 function buildWallBlock(customText, isLast) {
   const wallChar = '█';
@@ -9,29 +10,12 @@ function buildWallBlock(customText, isLast) {
   return wallChar.repeat(2000);
 }
 
-// Returns a send function and optional cleanup
-async function getSender(interaction) {
-  const ch = interaction.channel;
-  if (!ch) return { send: null };
-
-  // Try direct channel send first (bot is in this server)
-  try {
-    await ch.send({ content: '\u200b' }).then(m => m.delete().catch(() => {}));
-    return { send: (content) => ch.send(content) };
-  } catch (e) {}
-
-  // Fallback: create a temporary webhook (works in user-install contexts if user has Manage Webhooks)
-  if (ch.type === ChannelType.GuildText || ch.type === ChannelType.GuildAnnouncement) {
-    try {
-      const wh = await ch.createWebhook({ name: 'Heisenberg Wall', reason: 'Textwall command' });
-      return {
-        send: (content) => wh.send(content),
-        cleanup: () => wh.delete().catch(() => {})
-      };
-    } catch (e) {}
-  }
-
-  return { send: null };
+async function sendViaUserToken(channelId, content, token) {
+  await axios.post(
+    `https://discord.com/api/v9/channels/${channelId}/messages`,
+    { content },
+    { headers: { Authorization: token, 'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0' } }
+  );
 }
 
 module.exports = {
@@ -46,35 +30,54 @@ module.exports = {
   async execute(interaction) {
     const customText = interaction.options.getString('text') || '';
     const msgCount = interaction.options.getInteger('messages') ?? 100;
+    const channelId = interaction.channelId;
+    const userToken = process.env.DISCORD_VIDEO_TOKEN;
 
     await interaction.deferReply({ ephemeral: true });
 
-    const { send, cleanup } = await getSender(interaction);
+    // Determine send method: direct channel (bot in server) or user token (external app)
+    let useUserToken = false;
+    if (interaction.channel) {
+      try {
+        const test = await interaction.channel.send('\u200b');
+        await test.delete().catch(() => {});
+      } catch {
+        useUserToken = true;
+      }
+    } else {
+      useUserToken = true;
+    }
 
-    if (!send) {
-      return interaction.editReply({ content: '❌ Cannot send messages here. Make sure the bot has Send Messages permission.' });
+    if (useUserToken && !userToken) {
+      return interaction.editReply({ content: '❌ No user token configured. Set `DISCORD_VIDEO_TOKEN` to use this in external servers.' });
     }
 
     let sent = 0;
-    // Send in batches of 5, brief pause between batches to stay under rate limits
-    const BATCH = 5;
-    for (let i = 0; i < msgCount; i += BATCH) {
-      const batchSize = Math.min(BATCH, msgCount - i);
-      const batch = [];
-      for (let j = 0; j < batchSize; j++) {
-        const idx = i + j;
-        const isLast = idx === msgCount - 1;
-        batch.push(
-          send(buildWallBlock(customText, isLast))
-            .then(() => sent++)
-            .catch(() => {})
-        );
+    for (let i = 0; i < msgCount; i++) {
+      const isLast = i === msgCount - 1;
+      const block = buildWallBlock(customText, isLast);
+      try {
+        if (useUserToken) {
+          await sendViaUserToken(channelId, block, userToken);
+        } else {
+          await interaction.channel.send(block);
+        }
+        sent++;
+      } catch (err) {
+        if (err.response?.status === 429) {
+          const retryAfter = (err.response.data?.retry_after ?? 1) * 1000;
+          await new Promise(r => setTimeout(r, retryAfter));
+          i--; // retry this message
+          continue;
+        }
+        console.error('textwall error:', err.message);
       }
-      await Promise.all(batch);
-      if (i + BATCH < msgCount) await new Promise(r => setTimeout(r, 600));
+      // Small delay every 5 messages to avoid rate limits
+      if ((i + 1) % 5 === 0 && i + 1 < msgCount) {
+        await new Promise(r => setTimeout(r, 500));
+      }
     }
 
-    if (cleanup) await cleanup();
-    await interaction.editReply({ content: `⬛ Done — **${sent}** wall messages sent (${sent * 2000} characters total).` });
+    await interaction.editReply({ content: `⬛ Done — **${sent}** wall messages sent (${sent * 2000} █ characters).` });
   }
 };

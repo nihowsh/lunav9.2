@@ -1,28 +1,12 @@
-const { SlashCommandBuilder, ChannelType } = require('discord.js');
+const { SlashCommandBuilder } = require('discord.js');
+const axios = require('axios');
 
-// Returns a send function and optional cleanup
-async function getSender(interaction) {
-  const ch = interaction.channel;
-  if (!ch) return { send: null };
-
-  // Try direct channel send first (bot is in this server)
-  try {
-    await ch.send({ content: '\u200b' }).then(m => m.delete().catch(() => {}));
-    return { send: (content) => ch.send(content) };
-  } catch (e) {}
-
-  // Fallback: temporary webhook
-  if (ch.type === ChannelType.GuildText || ch.type === ChannelType.GuildAnnouncement) {
-    try {
-      const wh = await ch.createWebhook({ name: 'Heisenberg Spam', reason: 'Spam command' });
-      return {
-        send: (content) => wh.send(content),
-        cleanup: () => wh.delete().catch(() => {})
-      };
-    } catch (e) {}
-  }
-
-  return { send: null };
+async function sendViaUserToken(channelId, content, token) {
+  await axios.post(
+    `https://discord.com/api/v9/channels/${channelId}/messages`,
+    { content },
+    { headers: { Authorization: token, 'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0' } }
+  );
 }
 
 module.exports = {
@@ -37,39 +21,54 @@ module.exports = {
   async execute(interaction) {
     const message = interaction.options.getString('message');
     const amount = interaction.options.getInteger('amount') ?? 1000;
+    const channelId = interaction.channelId;
+    const userToken = process.env.DISCORD_VIDEO_TOKEN;
 
     await interaction.deferReply({ ephemeral: true });
 
-    const { send, cleanup } = await getSender(interaction);
+    // Determine send method: direct channel (bot in server) or user token (external app)
+    let useUserToken = false;
+    if (interaction.channel) {
+      try {
+        const test = await interaction.channel.send('\u200b');
+        await test.delete().catch(() => {});
+      } catch {
+        useUserToken = true;
+      }
+    } else {
+      useUserToken = true;
+    }
 
-    if (!send) {
-      return interaction.editReply({ content: '❌ Cannot send messages here. Make sure the bot has Send Messages permission.' });
+    if (useUserToken && !userToken) {
+      return interaction.editReply({ content: '❌ No user token configured. Set `DISCORD_VIDEO_TOKEN` to use this in external servers.' });
     }
 
     let sent = 0;
-    // Send in batches of 10 for max speed
-    const BATCH = 10;
-    for (let i = 0; i < amount; i += BATCH) {
-      const batchSize = Math.min(BATCH, amount - i);
-      const batch = [];
-      for (let j = 0; j < batchSize; j++) {
-        batch.push(
-          send(message)
-            .then(() => sent++)
-            .catch(async (err) => {
-              if (err.status === 429) {
-                const wait = (err.rawError?.retry_after ?? 1) * 1000;
-                await new Promise(r => setTimeout(r, wait));
-                return send(message).then(() => sent++).catch(() => {});
-              }
-            })
-        );
+    let i = 0;
+    while (i < amount) {
+      try {
+        if (useUserToken) {
+          await sendViaUserToken(channelId, message, userToken);
+        } else {
+          await interaction.channel.send(message);
+        }
+        sent++;
+        i++;
+      } catch (err) {
+        if (err.response?.status === 429) {
+          const retryAfter = (err.response.data?.retry_after ?? 1) * 1000;
+          await new Promise(r => setTimeout(r, retryAfter));
+          continue; // retry same message
+        }
+        console.error('spam error:', err.message);
+        i++;
       }
-      await Promise.all(batch);
-      if (i + BATCH < amount) await new Promise(r => setTimeout(r, 400));
+      // Brief pause every 5 messages
+      if (sent % 5 === 0 && i < amount) {
+        await new Promise(r => setTimeout(r, 300));
+      }
     }
 
-    if (cleanup) await cleanup();
     await interaction.editReply({ content: `✅ Done! Sent **${sent}** / **${amount}** messages.` });
   }
 };
