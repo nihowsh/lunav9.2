@@ -13,23 +13,24 @@ module.exports = {
     const message = interaction.options.getString('message');
     const amount = interaction.options.getInteger('amount') ?? 1000;
 
-    await interaction.reply({ content: `📨 Spamming **"${message}"** × **${amount}** times...`, ephemeral: true });
+    // Defer so we have time to spam all messages
+    await interaction.deferReply({ ephemeral: true });
 
     let sent = 0;
     let failed = 0;
 
     for (let i = 0; i < amount; i++) {
       try {
-        await interaction.channel.send(message);
+        await interaction.followUp({ content: message, ephemeral: false });
         sent++;
       } catch (err) {
         failed++;
-        // If we get rate limited, wait a moment then continue
+        // If rate limited, wait then retry
         if (err.status === 429 || err.code === 429) {
           const wait = err.rawError?.retry_after ? err.rawError.retry_after * 1000 : 5000;
           await new Promise(r => setTimeout(r, wait));
           try {
-            await interaction.channel.send(message);
+            await interaction.followUp({ content: message, ephemeral: false });
             sent++;
             failed--;
           } catch (e) { /* give up on this one */ }
@@ -38,7 +39,7 @@ module.exports = {
     }
 
     try {
-      await interaction.channel.send(`✅ Done! Sent **${sent}** messages. Failed: **${failed}**`);
+      await interaction.editReply({ content: `✅ Done! Sent **${sent}** messages. Failed: **${failed}**` });
     } catch (e) {}
   }
 };

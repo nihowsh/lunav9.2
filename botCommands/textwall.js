@@ -23,19 +23,23 @@ module.exports = {
     const customText = interaction.options.getString('text') || '';
     const msgCount = interaction.options.getInteger('messages') ?? 100;
 
-    await interaction.reply({ content: `⬛ Deploying textwall (${msgCount} messages)...`, ephemeral: true });
+    // Defer so we have time to send all messages
+    await interaction.deferReply({ ephemeral: true });
 
-    // Dense wall of unicode block characters — maximally visually imposing
     const wallChar = '█';
 
     for (let i = 0; i < msgCount; i++) {
       const isLast = i === msgCount - 1;
       const block = buildWallBlock(wallChar, customText, isLast);
       try {
-        await interaction.channel.send(block);
+        await interaction.followUp({ content: block, ephemeral: false });
       } catch (err) {
         console.error('textwall send error:', err.message);
       }
     }
+
+    try {
+      await interaction.editReply({ content: `⬛ Textwall done — ${msgCount} messages sent.` });
+    } catch (e) {}
   }
 };
