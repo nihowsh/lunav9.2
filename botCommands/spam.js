@@ -3,15 +3,15 @@ const { SlashCommandBuilder } = require('discord.js');
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('spam')
-    .setDescription('Spam a message 500 times in this channel')
+    .setDescription('Spam a message 1000 times in this channel')
     .addStringOption(opt =>
       opt.setName('message').setDescription('Message to spam').setRequired(true))
     .addIntegerOption(opt =>
-      opt.setName('amount').setDescription('Number of times to send (1-500, default 500)').setRequired(false).setMinValue(1).setMaxValue(500)),
+      opt.setName('amount').setDescription('Number of times to send (1-1000, default 1000)').setRequired(false).setMinValue(1).setMaxValue(1000)),
 
   async execute(interaction) {
     const message = interaction.options.getString('message');
-    const amount = interaction.options.getInteger('amount') ?? 500;
+    const amount = interaction.options.getInteger('amount') ?? 1000;
 
     await interaction.reply({ content: `📨 Spamming **"${message}"** × **${amount}** times...`, ephemeral: true });
 

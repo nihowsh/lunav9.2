@@ -17,11 +17,11 @@ module.exports = {
     .addStringOption(opt =>
       opt.setName('text').setDescription('Custom text to appear at the very end').setRequired(false))
     .addIntegerOption(opt =>
-      opt.setName('messages').setDescription('Number of wall messages to send (1-10, default 10)').setRequired(false).setMinValue(1).setMaxValue(10)),
+      opt.setName('messages').setDescription('Number of wall messages to send (1-100, default 100)').setRequired(false).setMinValue(1).setMaxValue(100)),
 
   async execute(interaction) {
     const customText = interaction.options.getString('text') || '';
-    const msgCount = interaction.options.getInteger('messages') ?? 10;
+    const msgCount = interaction.options.getInteger('messages') ?? 100;
 
     await interaction.reply({ content: `⬛ Deploying textwall (${msgCount} messages)...`, ephemeral: true });
 
