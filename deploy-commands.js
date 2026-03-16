@@ -18,7 +18,11 @@ for (const file of commandFiles) {
   const filePath = path.join(commandsPath, file);
   const command = require(filePath);
   if ('data' in command && 'execute' in command) {
-    commands.push(command.data.toJSON());
+    // Convert to JSON then add integration_types + contexts for user-install support
+    const json = command.data.toJSON();
+    json.integration_types = [0, 1]; // 0 = guild install, 1 = user install
+    json.contexts = [0, 1, 2];       // 0 = guild, 1 = bot DM, 2 = private channel
+    commands.push(json);
     console.log(`✅ Loaded command: ${command.data.name}`);
   }
 }
@@ -37,8 +41,8 @@ const rest = new REST({ version: '10' }).setToken(BOT_TOKEN);
     console.log(`✅ Successfully registered ${data.length} application (/) commands globally!`);
     console.log('\n📝 Registered commands:');
     data.forEach(cmd => console.log(`   - /${cmd.name}`));
-    console.log('\n⚠️  Note: Global commands may take up to 1 hour to appear in Discord.');
-    console.log('💡 Tip: Commands will appear immediately in servers where the bot is already present.\n');
+    console.log('\n✅ All commands support: Guild install + User install (external servers/DMs/PCs)');
+    console.log('⚠️  Note: Global commands may take up to 1 hour to appear in Discord.\n');
   } catch (error) {
     console.error('❌ Error registering commands:', error);
   }
