@@ -21,8 +21,7 @@ module.exports = {
 
   async execute(interaction, client) {
     const passcode = interaction.options.getString('passcode');
-    
-    // Check passcode FIRST - no exceptions, not even for owner
+
     if (passcode !== PASSCODE) {
       return await interaction.reply({
         content: '❌ **Invalid passcode!** Access denied.',
@@ -30,9 +29,11 @@ module.exports = {
       });
     }
 
+    const content = interaction.options.getString('message');
+    const attachment = interaction.options.getString('attachment');
     const guildId = interaction.options.getString('server');
     let guildsToDM = [];
-    
+
     if (guildId === 'all') {
       guildsToDM = Array.from(client.guilds.cache.values());
     } else if (guildId) {
@@ -43,15 +44,8 @@ module.exports = {
     if (guildsToDM.length === 0) {
       if (interaction.guild) {
         guildsToDM = [interaction.guild];
-      } else if (guildId && guildId !== 'all') {
-        const manualGuild = client.guilds.cache.get(guildId);
-        if (manualGuild) {
-          guildsToDM = [manualGuild];
-        } else {
-          return interaction.reply({ content: '❌ Could not find the specified server. Please ensure the bot is a member of that server.', ephemeral: true });
-        }
       } else {
-        return interaction.reply({ content: '❌ Please select a server from the list or use this command in a server where the bot is present.', ephemeral: true });
+        return interaction.reply({ content: '❌ Please select a server from the list or use this command inside a server.', ephemeral: true });
       }
     }
 
@@ -64,16 +58,15 @@ module.exports = {
 
     for (const guildToDM of guildsToDM) {
       await interaction.channel.send(`📤 Starting mass DM to members in **${guildToDM.name}**...`);
-      
+
       try {
-        // Force fetch all members to ensure cache is populated
         const membersFetched = await guildToDM.members.fetch({ force: true });
         const members = membersFetched.filter(m => !m.user.bot && m.id !== client.user.id);
         const guildTotal = members.size;
         totalTargeted += guildTotal;
-        
+
         if (guildTotal === 0) {
-          await interaction.channel.send(`⚠️ No members found in **${guildToDM.name}** or unable to fetch them.`);
+          await interaction.channel.send(`⚠️ No members found in **${guildToDM.name}**.`);
           continue;
         }
 
@@ -93,7 +86,7 @@ module.exports = {
             guildFailed++;
             totalFailed++;
           }
-          
+
           if (index % 10 === 0) {
             const progressPercent = Math.round((index / guildTotal) * 100);
             await interaction.channel.send(`📊 **PROGRESS [${guildToDM.name}]**\n✅ Sent: **${guildSent}/${guildTotal}** (${progressPercent}%)\n❌ Failed: **${guildFailed}**`);
@@ -116,13 +109,13 @@ module.exports = {
       value: guild.id,
     }));
 
-    guildsToDM.push({ name: 'All Servers', value: 'all' });
+    guilds.push({ name: 'All Servers', value: 'all' });
 
     const filtered = guilds.filter(choice => choice.name.toLowerCase().includes(focusedValue.toLowerCase())).slice(0, 25);
     try {
       await interaction.respond(filtered);
     } catch (err) {
-      if (err.code !== 10062) { // Ignore "Unknown interaction" which happens if bot is too slow or user cancels
+      if (err.code !== 10062) {
         console.error('Autocomplete response error:', err);
       }
     }
