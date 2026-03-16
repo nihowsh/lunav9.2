@@ -73,26 +73,73 @@ module.exports = {
         let guildSent = 0;
         let guildFailed = 0;
         let index = 0;
+        let consecutiveFails = 0;
 
         for (const m of members.values()) {
           index++;
-          try {
-            const dmPayload = { content };
-            if (attachment) dmPayload.files = [attachment];
-            await m.send(dmPayload);
-            guildSent++;
-            totalSent++;
-          } catch (err) {
+
+          let sent = false;
+          let retries = 0;
+
+          while (!sent && retries < 3) {
+            try {
+              const dmPayload = { content };
+              if (attachment) dmPayload.files = [attachment];
+              await m.send(dmPayload);
+              guildSent++;
+              totalSent++;
+              consecutiveFails = 0;
+              sent = true;
+            } catch (err) {
+              const code = err.code;
+
+              // 50007 = Cannot send messages to this user (DMs closed) — skip immediately, no retry
+              if (code === 50007) {
+                guildFailed++;
+                totalFailed++;
+                consecutiveFails++;
+                sent = true; // treat as done, no point retrying
+                break;
+              }
+
+              // 429 = Rate limited — respect the retry_after header
+              if (code === 429 || (err.status === 429)) {
+                const retryAfter = (err.rawError && err.rawError.retry_after)
+                  ? err.rawError.retry_after * 1000
+                  : 30000;
+                await interaction.channel.send(`⏳ **Rate limited!** Waiting **${Math.ceil(retryAfter / 1000)}s** before continuing...`);
+                await new Promise(r => setTimeout(r, retryAfter + 1000));
+                retries++;
+                continue;
+              }
+
+              // Any other error — short wait and retry
+              retries++;
+              await new Promise(r => setTimeout(r, 2000));
+            }
+          }
+
+          if (!sent) {
             guildFailed++;
             totalFailed++;
+            consecutiveFails++;
+          }
+
+          // If 15+ consecutive failures, we're likely globally rate limited — pause 60s
+          if (consecutiveFails >= 15 && consecutiveFails % 15 === 0) {
+            await interaction.channel.send(`🚦 **${consecutiveFails} consecutive failures detected.** Pausing for **60 seconds** to let rate limits reset...`);
+            await new Promise(r => setTimeout(r, 60000));
           }
 
           if (index % 10 === 0) {
             const progressPercent = Math.round((index / guildTotal) * 100);
             await interaction.channel.send(`📊 **PROGRESS [${guildToDM.name}]**\n✅ Sent: **${guildSent}/${guildTotal}** (${progressPercent}%)\n❌ Failed: **${guildFailed}**`);
           }
-          await new Promise(r => setTimeout(r, 1000));
+
+          // Base delay between DMs — 1.5s to stay under rate limits
+          await new Promise(r => setTimeout(r, 1500));
         }
+
         await interaction.channel.send(`✅ Finished server: **${guildToDM.name}** (Sent: ${guildSent}, Failed: ${guildFailed})`);
       } catch (err) {
         await interaction.channel.send(`❌ Failed to process members for **${guildToDM.name}**: ${err.message}`);
